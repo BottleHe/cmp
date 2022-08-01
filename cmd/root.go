@@ -180,28 +180,97 @@ func init() {
 	rootCmd.Flags().BoolP("concurrency", "c", true, "Enable concurrent copying")
 }
 
-func copyFile(source, destination string) {
-	var (
-		err  error
-		stat os.FileInfo
-	)
-	if stat, err = os.Stat(source); nil != err {
-		fmt.Errorf("Source file error, %v", err)
-		return
-	}
-	// 判断 源文件是目录还是文件
-	if stat.IsDir() { // 是目录
-
-	} else { // 是文件
-		// 判断目标是文件还是目录
-		if stat, err = os.Stat(destination); nil != err {
-			if os.IsNotExist(err) { // 如果表示不存在
-
+/**
+1. 判断需要拷贝的内容是目录还是文件
+	* 目录: 遍历其下面的子文件, 如果是目录, 就继续递归, 如果是文件, 就执行拷贝方法
+	* 文件: 直接调用文件拷贝方法
+2. 如果目录不存在, 则需要创建同样的文件, 并写入.
+*/
+func copy(source, destination string) {
+	if sStat, _ := os.Stat(source); sStat.IsDir() {
+		// 判断对应的目标是否存在
+		dStat, err := os.Stat(destination)
+		if nil != err {
+			if os.IsNotExist(err) {
+				if err = os.Mkdir(destination, 0755); nil != err {
+					fmt.Errorf("Destination[%s], %v", destination, err)
+					return
+				}
+			} else {
+				fmt.Errorf("Destination[%s] error, %v", destination, err)
+				return
 			}
 		}
+		// 已存在, 并没有错误的情况. 但它不是一个目录
+		if !dStat.IsDir() {
+			fmt.Errorf("Source[%s] is a directory, but destination[%s] is not.", source, destination)
+			return
+		}
+		// 后续流程, 读目录
+		f, err := os.OpenFile(source, os.O_RDONLY, os.ModeDir)
+		if nil != err {
+			fmt.Errorf("Source: %s, %v", source, err)
+			return
+		}
+		defer f.Close()
+		fList, err := f.ReadDir(-1) // 读取其中所有的目录项
+		if nil != err {
+			fmt.Errorf("ReadDir: %s, %v", source, err)
+			return
+		}
+		for _, fileInfo := range fList {
+			_source := fmt.Sprintf("%s%d%s", source, filepath.Separator, fileInfo.Name())
+			_destination := fmt.Sprintf("%s%d%s", destination, filepath.Separator, fileInfo.Name())
+
+			copy(_source, _destination)
+		}
+	} else {
+		copyFile(source, destination)
 	}
 }
 
-func doCopy(source, destination string, offset, length uint64) {
+func copyFile(source, destination string) {
+	// 判断目标文件是否存在
+	var sFp *os.File = nil
+	var dFp *os.File = nil
+	if _, err := os.Stat(destination); nil != err {
+		if os.IsNotExist(err) {
+			if dFp, err = os.Create(destination); nil != err {
+				fmt.Errorf("Destination: %s, %v", destination, err)
+				return
+			}
+			defer dFp.Close()
+		} else {
+			fmt.Errorf("Destination: %s, %v", destination, err)
+			return
+		}
+	} else { // 文件存在
+		if RENAME_FILE == DuplicateControl {
+			destination = destination + " Copy"
+			copyFile(source, destination)
+		} else if OVERWRITE_FILE == DuplicateControl {
+			dFp, err = os.OpenFile(destination, os.O_WRONLY|os.O_TRUNC, 0755)
+			if nil != err {
+				fmt.Errorf("OpenFile %s, %v", destination, err)
+				return
+			}
+			defer dFp.Close()
+		} else if IGNORE_FILE == DuplicateControl {
+			fmt.Sprintf("Ignore file %s", destination)
+			return
+		}
+	}
+	// 真正执行copy
+	stat, err := sFp.Stat()
+	if nil != err {
+		fmt.Errorf("Source: %s, %v", source, err)
+		return
+	}
+	doCopy(sFp, dFp, 0, stat.Size())
+}
 
+func doCopy(srcFp, destFp *os.File, offset, length int64) {
+	//srcFp.
+	//sBuf := bufio.NewReader(srcFp)
+	//buf := make([]byte, 4096)
 }

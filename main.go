@@ -17,17 +17,8 @@ package main
 
 import (
 	"cpm/cmd"
-	log "github.com/sirupsen/logrus"
-	"os"
 )
 
-func initLog() {
-	log.SetFormatter(&log.TextFormatter{})
-	log.SetOutput(os.Stdout)
-	log.SetLevel(log.DebugLevel)
-}
-
 func main() {
-	initLog()
 	cmd.Execute()
 }
